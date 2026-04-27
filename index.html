@@ -1,0 +1,427 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Divisor de nóminas</title>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --border: #e5e5e0;
+    --border-strong: #d0d0c8;
+    --text: #1a1a17;
+    --text-muted: #6b6b66;
+    --accent: #185fa5;
+    --accent-bg: #e6f1fb;
+    --success: #0f6e56;
+    --success-bg: #e1f5ee;
+    --danger: #a32d2d;
+    --danger-bg: #fcebeb;
+    --warn-bg: #faeeda;
+    --warn-text: #854f0b;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2rem 1rem;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .container {
+    max-width: 680px;
+    margin: 0 auto;
+  }
+  header { text-align: center; margin-bottom: 2rem; }
+  h1 { font-size: 22px; font-weight: 500; margin: 0 0 6px; }
+  header p { font-size: 14px; color: var(--text-muted); margin: 0; }
+
+  .privacy {
+    font-size: 12px;
+    color: var(--warn-text);
+    background: var(--warn-bg);
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 1.25rem;
+    text-align: center;
+  }
+
+  .drop {
+    border: 2px dashed var(--border-strong);
+    border-radius: var(--radius);
+    padding: 2.5rem 1rem;
+    text-align: center;
+    background: var(--surface);
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+  }
+  .drop:hover, .drop.dragover {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+  }
+  .drop p { margin: 0; }
+  .drop .main { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+  .drop .sub { font-size: 12px; color: var(--text-muted); }
+  .drop input { display: none; }
+
+  .file-info {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 1rem;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+  }
+  .file-info .meta { display: flex; align-items: center; gap: 10px; }
+  .file-info .icon {
+    width: 32px; height: 32px;
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 500; color: var(--text-muted);
+  }
+  .file-info .name { font-size: 13px; font-weight: 500; margin: 0; }
+  .file-info .size { font-size: 12px; color: var(--text-muted); margin: 0; }
+  .badge {
+    font-size: 12px;
+    padding: 4px 10px;
+    border-radius: var(--radius-sm);
+  }
+  .badge.success { color: var(--success); background: var(--success-bg); }
+  .badge.danger { color: var(--danger); background: var(--danger-bg); }
+
+  button {
+    width: 100%;
+    margin-top: 12px;
+    padding: 11px;
+    font-size: 14px;
+    font-weight: 500;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: inherit;
+  }
+  button:hover:not(:disabled) { background: var(--bg); border-color: var(--text-muted); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.primary {
+    background: var(--text);
+    color: var(--surface);
+    border-color: var(--text);
+  }
+  button.primary:hover:not(:disabled) { background: #000; }
+
+  .progress {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+  }
+  .progress-bar {
+    height: 6px;
+    background: var(--bg);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.2s;
+  }
+  .progress-text { font-size: 12px; color: var(--text-muted); }
+
+  .results {
+    margin-top: 1rem;
+    max-height: 320px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+  .result-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border);
+  }
+  .result-row:last-child { border-bottom: none; }
+  .result-row .num {
+    font-size: 11px;
+    color: var(--text-muted);
+    min-width: 28px;
+    font-variant-numeric: tabular-nums;
+  }
+  .result-row .filename {
+    flex: 1;
+    margin: 0 10px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .result-row .status {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+  }
+  .status.ok { color: var(--success); background: var(--success-bg); }
+  .status.warn { color: var(--warn-text); background: var(--warn-bg); }
+
+  footer {
+    text-align: center;
+    margin-top: 2rem;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  footer a { color: var(--text-muted); }
+
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Divisor de nóminas</h1>
+    <p>Sube un PDF con varias nóminas y descarga un ZIP con cada hoja renombrada</p>
+  </header>
+
+  <div class="privacy">
+    Tu archivo no se sube a ningún servidor. Todo el procesamiento ocurre en tu navegador.
+  </div>
+
+  <label class="drop" id="drop">
+    <input type="file" id="file" accept="application/pdf" />
+    <p class="main">Arrastra el PDF aquí o haz clic para seleccionar</p>
+    <p class="sub">Solo archivos PDF</p>
+  </label>
+
+  <div id="file-info" class="file-info hidden">
+    <div class="meta">
+      <div class="icon">PDF</div>
+      <div>
+        <p class="name" id="file-name"></p>
+        <p class="size" id="file-size"></p>
+      </div>
+    </div>
+    <span id="file-badge" class="badge success">Listo</span>
+  </div>
+
+  <button id="process" class="primary hidden">Procesar y descargar ZIP</button>
+
+  <div id="progress" class="progress hidden">
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+    <div class="progress-text" id="progress-text">Procesando...</div>
+  </div>
+
+  <div id="results" class="results hidden"></div>
+
+  <footer>
+    Procesamiento 100% local · sin servidores · sin tracking
+  </footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+
+  const BLACKLIST = [
+    "NOMINA", "NÓMINA", "RECIBO DE SALARIOS", "RECIBO DE SALARIO",
+    "EMPRESA", "TRABAJADOR", "CENTRO DE TRABAJO",
+    "PERIODO DE LIQUIDACION", "PERÍODO DE LIQUIDACIÓN",
+    "THINK AHEAD", "THINKAHEAD",
+    "TOTAL DEVENGADO", "LIQUIDO A PERCIBIR", "LÍQUIDO A PERCIBIR",
+    "DETERMINACION DE LAS BASES", "DETERMINACIÓN DE LAS BASES",
+    "DEVENGOS", "DEDUCCIONES", "BASES DE COTIZACION", "BASES DE COTIZACIÓN",
+    "FIRMA Y SELLO", "RECIBI", "RECIBÍ"
+  ];
+
+  const drop = document.getElementById("drop");
+  const fileInput = document.getElementById("file");
+  const fileInfo = document.getElementById("file-info");
+  const fileName = document.getElementById("file-name");
+  const fileSize = document.getElementById("file-size");
+  const fileBadge = document.getElementById("file-badge");
+  const processBtn = document.getElementById("process");
+  const progress = document.getElementById("progress");
+  const progressFill = document.getElementById("progress-fill");
+  const progressText = document.getElementById("progress-text");
+  const results = document.getElementById("results");
+
+  let currentFile = null;
+
+  drop.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    drop.classList.add("dragover");
+  });
+  drop.addEventListener("dragleave", () => drop.classList.remove("dragover"));
+  drop.addEventListener("drop", (e) => {
+    e.preventDefault();
+    drop.classList.remove("dragover");
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener("change", (e) => {
+    if (e.target.files.length) handleFile(e.target.files[0]);
+  });
+
+  function handleFile(file) {
+    if (file.type !== "application/pdf") {
+      alert("Por favor, sube un archivo PDF.");
+      return;
+    }
+    currentFile = file;
+    fileName.textContent = file.name;
+    fileSize.textContent = formatSize(file.size);
+    fileBadge.textContent = "Listo";
+    fileBadge.className = "badge success";
+    fileInfo.classList.remove("hidden");
+    processBtn.classList.remove("hidden");
+    results.classList.add("hidden");
+    progress.classList.add("hidden");
+  }
+
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
+  function limpiarNombre(nombre) {
+    nombre = nombre.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+    nombre = nombre.trim().replace(/\s+/g, "_");
+    nombre = nombre.replace(/[^A-Za-z0-9_-]/g, "");
+    return nombre || "sin_nombre";
+  }
+
+  function esCandidatoNombre(linea) {
+    linea = linea.trim();
+    if (linea.length < 5 || linea.length > 60) return false;
+    if (!/^[A-ZÑÁÉÍÓÚÜ\-'\.\s]+$/.test(linea)) return false;
+    if (linea.split(/\s+/).length < 2) return false;
+    for (const bl of BLACKLIST) {
+      if (linea.includes(bl)) return false;
+    }
+    return true;
+  }
+
+  async function extraerTexto(pdfDoc, pageNum) {
+    const page = await pdfDoc.getPage(pageNum);
+    const content = await page.getTextContent();
+    // Agrupar por línea (mismo `y` aproximado)
+    const lines = {};
+    for (const item of content.items) {
+      const y = Math.round(item.transform[5]);
+      if (!lines[y]) lines[y] = [];
+      lines[y].push({ x: item.transform[4], text: item.str });
+    }
+    // Ordenar por y descendente (de arriba a abajo en PDF)
+    const sortedY = Object.keys(lines).map(Number).sort((a, b) => b - a);
+    return sortedY.map(y =>
+      lines[y].sort((a, b) => a.x - b.x).map(i => i.text).join(" ").trim()
+    ).filter(l => l);
+  }
+
+  function extraerNombre(lineas, pageNum) {
+    for (const linea of lineas) {
+      if (esCandidatoNombre(linea)) return { nombre: linea, ok: true };
+    }
+    return { nombre: `pagina_${pageNum}`, ok: false };
+  }
+
+  processBtn.addEventListener("click", procesar);
+
+  async function procesar() {
+    if (!currentFile) return;
+    processBtn.disabled = true;
+    progress.classList.remove("hidden");
+    results.innerHTML = "";
+    results.classList.add("hidden");
+
+    const buffer = await currentFile.arrayBuffer();
+
+    // Cargar con pdf.js para extraer texto
+    const pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
+    // Cargar con pdf-lib para dividir
+    const sourcePdf = await PDFLib.PDFDocument.load(buffer);
+
+    const numPages = pdfDoc.numPages;
+    const zip = new JSZip();
+    const usados = {};
+    const filas = [];
+
+    for (let i = 1; i <= numPages; i++) {
+      progressText.textContent = `Procesando página ${i} de ${numPages}...`;
+      progressFill.style.width = ((i - 1) / numPages * 100) + "%";
+
+      const lineas = await extraerTexto(pdfDoc, i);
+      let { nombre, ok } = extraerNombre(lineas, i);
+      const limpio = limpiarNombre(nombre);
+
+      // Evitar duplicados
+      let nombreFinal = limpio;
+      if (usados[limpio]) {
+        usados[limpio]++;
+        nombreFinal = `${limpio}_${usados[limpio]}`;
+      } else {
+        usados[limpio] = 1;
+      }
+
+      // Crear PDF de una página
+      const newPdf = await PDFLib.PDFDocument.create();
+      const [copiedPage] = await newPdf.copyPages(sourcePdf, [i - 1]);
+      newPdf.addPage(copiedPage);
+      const bytes = await newPdf.save();
+
+      zip.file(`${nombreFinal}.pdf`, bytes);
+      filas.push({ pagina: i, nombre: nombreFinal, ok });
+    }
+
+    progressFill.style.width = "100%";
+    progressText.textContent = "Generando ZIP...";
+
+    const blob = await zip.generateAsync({ type: "blob" });
+    const baseName = currentFile.name.replace(/\.pdf$/i, "");
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `${baseName}_dividido.zip`;
+    a.click();
+    URL.revokeObjectURL(url);
+
+    // Mostrar resultados
+    const okCount = filas.filter(f => f.ok).length;
+    const warnCount = filas.length - okCount;
+    fileBadge.textContent = `${okCount} con nombre · ${warnCount} sin detectar`;
+    fileBadge.className = warnCount > 0 ? "badge danger" : "badge success";
+
+    results.innerHTML = filas.map(f => `
+      <div class="result-row">
+        <span class="num">${f.pagina}</span>
+        <span class="filename">${f.nombre}.pdf</span>
+        <span class="status ${f.ok ? 'ok' : 'warn'}">${f.ok ? 'OK' : 'Sin nombre'}</span>
+      </div>
+    `).join("");
+    results.classList.remove("hidden");
+
+    progress.classList.add("hidden");
+    processBtn.disabled = false;
+    progressText.textContent = "Listo";
+  }
+</script>
+</body>
+</html>
