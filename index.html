@@ -32,10 +32,7 @@
     color: var(--text);
     line-height: 1.5;
   }
-  .container {
-    max-width: 680px;
-    margin: 0 auto;
-  }
+  .container { max-width: 680px; margin: 0 auto; }
   header { text-align: center; margin-bottom: 2rem; }
   h1 { font-size: 22px; font-weight: 500; margin: 0 0 6px; }
   header p { font-size: 14px; color: var(--text-muted); margin: 0; }
@@ -50,7 +47,18 @@
     text-align: center;
   }
 
+  .lib-status {
+    font-size: 11px;
+    text-align: center;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+  }
+  .lib-status.ok { color: var(--success); }
+  .lib-status.error { color: var(--danger); }
+
   .drop {
+    display: block;
+    width: 100%;
     border: 2px dashed var(--border-strong);
     border-radius: var(--radius);
     padding: 2.5rem 1rem;
@@ -58,6 +66,7 @@
     background: var(--surface);
     cursor: pointer;
     transition: background 0.15s, border-color 0.15s;
+    box-sizing: border-box;
   }
   .drop:hover, .drop.dragover {
     border-color: var(--accent);
@@ -66,7 +75,12 @@
   .drop p { margin: 0; }
   .drop .main { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
   .drop .sub { font-size: 12px; color: var(--text-muted); }
-  .drop input { display: none; }
+  .drop input {
+    position: absolute;
+    width: 1px; height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
 
   .file-info {
     display: flex;
@@ -88,11 +102,7 @@
   }
   .file-info .name { font-size: 13px; font-weight: 500; margin: 0; }
   .file-info .size { font-size: 12px; color: var(--text-muted); margin: 0; }
-  .badge {
-    font-size: 12px;
-    padding: 4px 10px;
-    border-radius: var(--radius-sm);
-  }
+  .badge { font-size: 12px; padding: 4px 10px; border-radius: var(--radius-sm); }
   .badge.success { color: var(--success); background: var(--success-bg); }
   .badge.danger { color: var(--danger); background: var(--danger-bg); }
 
@@ -107,10 +117,9 @@
     color: var(--text);
     border-radius: var(--radius-sm);
     cursor: pointer;
-    transition: all 0.15s;
     font-family: inherit;
   }
-  button:hover:not(:disabled) { background: var(--bg); border-color: var(--text-muted); }
+  button:hover:not(:disabled) { background: var(--bg); }
   button:disabled { opacity: 0.5; cursor: not-allowed; }
   button.primary {
     background: var(--text);
@@ -181,14 +190,21 @@
   .status.ok { color: var(--success); background: var(--success-bg); }
   .status.warn { color: var(--warn-text); background: var(--warn-bg); }
 
+  .error {
+    margin-top: 1rem;
+    padding: 12px;
+    background: var(--danger-bg);
+    color: var(--danger);
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+  }
+
   footer {
     text-align: center;
     margin-top: 2rem;
     font-size: 11px;
     color: var(--text-muted);
   }
-  footer a { color: var(--text-muted); }
-
   .hidden { display: none !important; }
 </style>
 </head>
@@ -202,6 +218,8 @@
   <div class="privacy">
     Tu archivo no se sube a ningún servidor. Todo el procesamiento ocurre en tu navegador.
   </div>
+
+  <div id="lib-status" class="lib-status">Cargando librerías...</div>
 
   <label class="drop" id="drop">
     <input type="file" id="file" accept="application/pdf" />
@@ -227,28 +245,73 @@
     <div class="progress-text" id="progress-text">Procesando...</div>
   </div>
 
+  <div id="error" class="error hidden"></div>
   <div id="results" class="results hidden"></div>
 
-  <footer>
-    Procesamiento 100% local · sin servidores · sin tracking
-  </footer>
+  <footer>Procesamiento 100% local · sin servidores · sin tracking</footer>
 </div>
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
-  pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  const libStatus = document.getElementById("lib-status");
+  
+  // Verificar carga de librerías
+  function checkLibs() {
+    const missing = [];
+    if (typeof pdfjsLib === "undefined") missing.push("pdf.js");
+    if (typeof PDFLib === "undefined") missing.push("pdf-lib");
+    if (typeof JSZip === "undefined") missing.push("JSZip");
+    
+    if (missing.length > 0) {
+      libStatus.textContent = "Error: no se cargaron " + missing.join(", ") + ". Recarga la página.";
+      libStatus.className = "lib-status error";
+      return false;
+    }
+    
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    libStatus.textContent = "Librerías cargadas ✓";
+    libStatus.className = "lib-status ok";
+    setTimeout(() => libStatus.classList.add("hidden"), 1500);
+    return true;
+  }
+
+  // Esperar a que carguen las libs (a veces tardan unos ms)
+  let libsReady = false;
+  function tryLoad(retries = 10) {
+    if (checkLibs()) {
+      libsReady = true;
+      return;
+    }
+    if (retries > 0) {
+      setTimeout(() => tryLoad(retries - 1), 200);
+    }
+  }
+  tryLoad();
 
   const BLACKLIST = [
-    "NOMINA", "NÓMINA", "RECIBO DE SALARIOS", "RECIBO DE SALARIO",
-    "EMPRESA", "TRABAJADOR", "CENTRO DE TRABAJO",
-    "PERIODO DE LIQUIDACION", "PERÍODO DE LIQUIDACIÓN",
-    "THINK AHEAD", "THINKAHEAD",
-    "TOTAL DEVENGADO", "LIQUIDO A PERCIBIR", "LÍQUIDO A PERCIBIR",
-    "DETERMINACION DE LAS BASES", "DETERMINACIÓN DE LAS BASES",
-    "DEVENGOS", "DEDUCCIONES", "BASES DE COTIZACION", "BASES DE COTIZACIÓN",
-    "FIRMA Y SELLO", "RECIBI", "RECIBÍ"
+    "NOMINA", "NÓMINA", "RECIBO", "EMPRESA", "TRABAJADOR",
+    "DOMICILIO", "PERIODO", "PERÍODO", "THINK AHEAD", "THINKAHEAD", "ACADEMY",
+    "TOTAL DEVENGADO", "LIQUIDO A PERCIBIR", "LÍQUIDO",
+    "DETERMINACION", "DETERMINACIÓN", "DEVENGOS", "DEDUCCIONES",
+    "BASES DE COTIZACION", "BASES DE COTIZACIÓN", "FIRMA", "RECIBI", "RECIBÍ",
+    "ALCOBENDAS", "MADRID", "BOADILLA", "MAJADAHONDA", "VALDEMORILLO",
+    "COLMENAR", "SAN SEBASTIAN", "SAN SEBASTIÁN",
+    "CATEGORIA", "CATEGORÍA", "MATRIC", "ANTIGUEDAD", "ANTIGÜEDAD",
+    "TOT. DIAS", "TOT. DÍAS", "VALPORTILLO", "CALLE",
+    "CUANTIA", "CUANTÍA", "CONCEPTO",
+    "REM. TOTAL", "P.P.EXTRAS", "BASE S", "BASE A", "BASE I",
+    "T. DEVENGADO", "T. A DEDUCIR", "FECHA SELLO",
+    "PERCEPCIONES", "CONTINGENCIAS", "MECANISMO", "DESEMPLEO",
+    "FORMACION", "FORMACIÓN", "FONDO GARANTIA", "FONDO GARANTÍA",
+    "COTIZACION", "COTIZACIÓN", "TRIBUTACION", "TRIBUTACIÓN",
+    "APORTACION", "APORTACIÓN", "RECAUDACION", "RECAUDACIÓN",
+    "SALARIO BASE", "PAGAS EXTRAS", "COMPLEMENTO", "COMPLEM",
+    "PLUS PRODUCTIVIDAD", "PLUS TRANSPORTE", "HORAS EXTRAS",
+    "ENFERMEDAD", "AT Y EP", "MEI", "TARIFA", "SECCION", "SECCIÓN",
+    "OFICIAL", "AUXILIAR", "DIRECTOR", "PROFESOR", "TITULADO",
+    "INSTRUCTOR", "EMPLEADO", "AGENTE COM"
   ];
 
   const drop = document.getElementById("drop");
@@ -262,6 +325,7 @@
   const progressFill = document.getElementById("progress-fill");
   const progressText = document.getElementById("progress-text");
   const results = document.getElementById("results");
+  const errorBox = document.getElementById("error");
 
   let currentFile = null;
 
@@ -280,8 +344,8 @@
   });
 
   function handleFile(file) {
-    if (file.type !== "application/pdf") {
-      alert("Por favor, sube un archivo PDF.");
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      showError("Por favor, sube un archivo PDF.");
       return;
     }
     currentFile = file;
@@ -293,12 +357,18 @@
     processBtn.classList.remove("hidden");
     results.classList.add("hidden");
     progress.classList.add("hidden");
+    errorBox.classList.add("hidden");
   }
 
   function formatSize(bytes) {
     if (bytes < 1024) return bytes + " B";
     if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
+  function showError(msg) {
+    errorBox.textContent = msg;
+    errorBox.classList.remove("hidden");
   }
 
   function limpiarNombre(nombre) {
@@ -313,23 +383,28 @@
     if (linea.length < 5 || linea.length > 60) return false;
     if (!/^[A-ZÑÁÉÍÓÚÜ\-'\.\s]+$/.test(linea)) return false;
     if (linea.split(/\s+/).length < 2) return false;
+    const upper = linea.toUpperCase();
     for (const bl of BLACKLIST) {
-      if (linea.includes(bl)) return false;
+      if (upper.includes(bl)) return false;
     }
     return true;
   }
 
-  async function extraerTexto(pdfDoc, pageNum) {
+  // Extraer texto de una página agrupando items por línea (mismo y)
+  async function extraerTextoPagina(pdfDoc, pageNum) {
     const page = await pdfDoc.getPage(pageNum);
     const content = await page.getTextContent();
-    // Agrupar por línea (mismo `y` aproximado)
+    
+    // Agrupar items por coordenada Y (con tolerancia de 2 unidades)
     const lines = {};
     for (const item of content.items) {
-      const y = Math.round(item.transform[5]);
+      if (!item.str || !item.str.trim()) continue;
+      const y = Math.round(item.transform[5] / 2) * 2;
       if (!lines[y]) lines[y] = [];
       lines[y].push({ x: item.transform[4], text: item.str });
     }
-    // Ordenar por y descendente (de arriba a abajo en PDF)
+    
+    // Ordenar por y descendente (arriba a abajo en PDF)
     const sortedY = Object.keys(lines).map(Number).sort((a, b) => b - a);
     return sortedY.map(y =>
       lines[y].sort((a, b) => a.x - b.x).map(i => i.text).join(" ").trim()
@@ -337,90 +412,139 @@
   }
 
   function extraerNombre(lineas, pageNum) {
+    // Las primeras líneas (parte superior del PDF) suelen contener el nombre
+    for (const linea of lineas.slice(0, 15)) {
+      if (esCandidatoNombre(linea)) return { nombre: linea, ok: true };
+    }
+    // Buscar también en el resto por si acaso
     for (const linea of lineas) {
       if (esCandidatoNombre(linea)) return { nombre: linea, ok: true };
     }
     return { nombre: `pagina_${pageNum}`, ok: false };
   }
 
+  // Promise con timeout
+  function withTimeout(promise, ms, label) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`Timeout en ${label} (${ms/1000}s)`)), ms)
+      )
+    ]);
+  }
+
   processBtn.addEventListener("click", procesar);
 
   async function procesar() {
     if (!currentFile) return;
+    if (!libsReady) {
+      showError("Las librerías aún no han cargado. Espera un momento o recarga la página.");
+      return;
+    }
+    
     processBtn.disabled = true;
     progress.classList.remove("hidden");
     results.innerHTML = "";
     results.classList.add("hidden");
+    errorBox.classList.add("hidden");
 
-    const buffer = await currentFile.arrayBuffer();
+    try {
+      progressText.textContent = "Leyendo archivo...";
+      progressFill.style.width = "3%";
+      
+      const buffer = await currentFile.arrayBuffer();
+      
+      progressText.textContent = "Cargando PDF...";
+      progressFill.style.width = "8%";
+      
+      const pdfDoc = await withTimeout(
+        pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise,
+        30000,
+        "carga de PDF"
+      );
+      
+      const sourcePdf = await PDFLib.PDFDocument.load(buffer, { ignoreEncryption: true });
+      const numPages = pdfDoc.numPages;
+      
+      const zip = new JSZip();
+      const usados = {};
+      const filas = [];
 
-    // Cargar con pdf.js para extraer texto
-    const pdfDoc = await pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise;
-    // Cargar con pdf-lib para dividir
-    const sourcePdf = await PDFLib.PDFDocument.load(buffer);
-
-    const numPages = pdfDoc.numPages;
-    const zip = new JSZip();
-    const usados = {};
-    const filas = [];
-
-    for (let i = 1; i <= numPages; i++) {
-      progressText.textContent = `Procesando página ${i} de ${numPages}...`;
-      progressFill.style.width = ((i - 1) / numPages * 100) + "%";
-
-      const lineas = await extraerTexto(pdfDoc, i);
-      let { nombre, ok } = extraerNombre(lineas, i);
-      const limpio = limpiarNombre(nombre);
-
-      // Evitar duplicados
-      let nombreFinal = limpio;
-      if (usados[limpio]) {
-        usados[limpio]++;
-        nombreFinal = `${limpio}_${usados[limpio]}`;
-      } else {
-        usados[limpio] = 1;
+      for (let i = 1; i <= numPages; i++) {
+        progressText.textContent = `Procesando página ${i} de ${numPages}...`;
+        progressFill.style.width = ((i - 1) / numPages * 85 + 10) + "%";
+        
+        let nombre = `pagina_${i}`;
+        let ok = false;
+        
+        try {
+          const lineas = await withTimeout(
+            extraerTextoPagina(pdfDoc, i),
+            10000,
+            `extracción página ${i}`
+          );
+          const result = extraerNombre(lineas, i);
+          nombre = result.nombre;
+          ok = result.ok;
+        } catch (e) {
+          console.warn(`Página ${i}:`, e);
+        }
+        
+        const limpio = limpiarNombre(nombre);
+        let nombreFinal = limpio;
+        if (usados[limpio]) {
+          usados[limpio]++;
+          nombreFinal = `${limpio}_${usados[limpio]}`;
+        } else {
+          usados[limpio] = 1;
+        }
+        
+        const newPdf = await PDFLib.PDFDocument.create();
+        const [copiedPage] = await newPdf.copyPages(sourcePdf, [i - 1]);
+        newPdf.addPage(copiedPage);
+        const bytes = await newPdf.save();
+        
+        zip.file(`${nombreFinal}.pdf`, bytes);
+        filas.push({ pagina: i, nombre: nombreFinal, ok });
+        
+        await new Promise(r => setTimeout(r, 0));
       }
 
-      // Crear PDF de una página
-      const newPdf = await PDFLib.PDFDocument.create();
-      const [copiedPage] = await newPdf.copyPages(sourcePdf, [i - 1]);
-      newPdf.addPage(copiedPage);
-      const bytes = await newPdf.save();
+      progressText.textContent = "Generando ZIP...";
+      progressFill.style.width = "97%";
+      
+      const blob = await zip.generateAsync({ type: "blob" });
+      const baseName = currentFile.name.replace(/\.pdf$/i, "");
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${baseName}_dividido.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
 
-      zip.file(`${nombreFinal}.pdf`, bytes);
-      filas.push({ pagina: i, nombre: nombreFinal, ok });
+      const okCount = filas.filter(f => f.ok).length;
+      const warnCount = filas.length - okCount;
+      fileBadge.textContent = `${okCount} con nombre · ${warnCount} sin detectar`;
+      fileBadge.className = warnCount > 0 ? "badge danger" : "badge success";
+
+      results.innerHTML = filas.map(f => `
+        <div class="result-row">
+          <span class="num">${f.pagina}</span>
+          <span class="filename">${f.nombre}.pdf</span>
+          <span class="status ${f.ok ? 'ok' : 'warn'}">${f.ok ? 'OK' : 'Sin nombre'}</span>
+        </div>
+      `).join("");
+      results.classList.remove("hidden");
+      
+      progressFill.style.width = "100%";
+      progressText.textContent = `Listo: ${numPages} páginas procesadas`;
+    } catch (err) {
+      console.error(err);
+      showError("Error: " + err.message + ". Abre la consola del navegador (F12) para más detalles.");
+      progress.classList.add("hidden");
+    } finally {
+      processBtn.disabled = false;
     }
-
-    progressFill.style.width = "100%";
-    progressText.textContent = "Generando ZIP...";
-
-    const blob = await zip.generateAsync({ type: "blob" });
-    const baseName = currentFile.name.replace(/\.pdf$/i, "");
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${baseName}_dividido.zip`;
-    a.click();
-    URL.revokeObjectURL(url);
-
-    // Mostrar resultados
-    const okCount = filas.filter(f => f.ok).length;
-    const warnCount = filas.length - okCount;
-    fileBadge.textContent = `${okCount} con nombre · ${warnCount} sin detectar`;
-    fileBadge.className = warnCount > 0 ? "badge danger" : "badge success";
-
-    results.innerHTML = filas.map(f => `
-      <div class="result-row">
-        <span class="num">${f.pagina}</span>
-        <span class="filename">${f.nombre}.pdf</span>
-        <span class="status ${f.ok ? 'ok' : 'warn'}">${f.ok ? 'OK' : 'Sin nombre'}</span>
-      </div>
-    `).join("");
-    results.classList.remove("hidden");
-
-    progress.classList.add("hidden");
-    processBtn.disabled = false;
-    progressText.textContent = "Listo";
   }
 </script>
 </body>
