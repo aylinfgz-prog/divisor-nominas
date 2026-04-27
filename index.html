@@ -453,17 +453,20 @@
       progressFill.style.width = "3%";
       
       const buffer = await currentFile.arrayBuffer();
+      // Crear dos copias independientes: pdf.js consume su buffer
+      const bufferForPdfJs = buffer.slice(0);
+      const bufferForPdfLib = buffer.slice(0);
       
       progressText.textContent = "Cargando PDF...";
       progressFill.style.width = "8%";
       
       const pdfDoc = await withTimeout(
-        pdfjsLib.getDocument({ data: new Uint8Array(buffer) }).promise,
+        pdfjsLib.getDocument({ data: new Uint8Array(bufferForPdfJs) }).promise,
         30000,
         "carga de PDF"
       );
       
-      const sourcePdf = await PDFLib.PDFDocument.load(buffer, { ignoreEncryption: true });
+      const sourcePdf = await PDFLib.PDFDocument.load(bufferForPdfLib, { ignoreEncryption: true });
       const numPages = pdfDoc.numPages;
       
       const zip = new JSZip();
