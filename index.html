@@ -65,7 +65,6 @@
     text-align: center;
     background: var(--surface);
     cursor: pointer;
-    transition: background 0.15s, border-color 0.15s;
     box-sizing: border-box;
   }
   .drop:hover, .drop.dragover {
@@ -190,13 +189,29 @@
   .status.ok { color: var(--success); background: var(--success-bg); }
   .status.warn { color: var(--warn-text); background: var(--warn-bg); }
 
-  .error {
+  .error, .diagnostic {
     margin-top: 1rem;
     padding: 12px;
-    background: var(--danger-bg);
-    color: var(--danger);
     border-radius: var(--radius-sm);
     font-size: 13px;
+  }
+  .error { background: var(--danger-bg); color: var(--danger); }
+  .diagnostic {
+    background: var(--warn-bg);
+    color: var(--warn-text);
+  }
+  .diagnostic pre {
+    margin: 8px 0 0 0;
+    padding: 8px;
+    background: rgba(255,255,255,0.5);
+    border-radius: 4px;
+    font-size: 11px;
+    overflow-x: auto;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 240px;
+    overflow-y: auto;
   }
 
   footer {
@@ -246,6 +261,7 @@
   </div>
 
   <div id="error" class="error hidden"></div>
+  <div id="diagnostic" class="diagnostic hidden"></div>
   <div id="results" class="results hidden"></div>
 
   <footer>Procesamiento 100% local · sin servidores · sin tracking</footer>
@@ -256,20 +272,18 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
   const libStatus = document.getElementById("lib-status");
-  
-  // Verificar carga de librerías
+
   function checkLibs() {
     const missing = [];
     if (typeof pdfjsLib === "undefined") missing.push("pdf.js");
     if (typeof PDFLib === "undefined") missing.push("pdf-lib");
     if (typeof JSZip === "undefined") missing.push("JSZip");
-    
+
     if (missing.length > 0) {
-      libStatus.textContent = "Error: no se cargaron " + missing.join(", ") + ". Recarga la página.";
+      libStatus.textContent = "Error: faltan " + missing.join(", ") + ". Recarga la página.";
       libStatus.className = "lib-status error";
       return false;
     }
-    
     pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
     libStatus.textContent = "Librerías cargadas ✓";
     libStatus.className = "lib-status ok";
@@ -277,31 +291,25 @@
     return true;
   }
 
-  // Esperar a que carguen las libs (a veces tardan unos ms)
   let libsReady = false;
   function tryLoad(retries = 10) {
-    if (checkLibs()) {
-      libsReady = true;
-      return;
-    }
-    if (retries > 0) {
-      setTimeout(() => tryLoad(retries - 1), 200);
-    }
+    if (checkLibs()) { libsReady = true; return; }
+    if (retries > 0) setTimeout(() => tryLoad(retries - 1), 200);
   }
   tryLoad();
 
+  // Blacklist más ligera: solo lo imprescindible para no confundir
   const BLACKLIST = [
-    "NOMINA", "NÓMINA", "RECIBO", "EMPRESA", "TRABAJADOR",
-    "DOMICILIO", "PERIODO", "PERÍODO", "THINK AHEAD", "THINKAHEAD", "ACADEMY",
-    "TOTAL DEVENGADO", "LIQUIDO A PERCIBIR", "LÍQUIDO",
+    "NOMINA", "NÓMINA", "RECIBO", "EMPRESA", "TRABAJADOR/A",
+    "DOMICILIO", "PERIODO", "PERÍODO",
+    "THINK AHEAD", "THINKAHEAD", "ACADEMY", "VIRTUS",
+    "TOTAL DEVENGADO", "LIQUIDO A PERCIBIR", "LÍQUIDO A PERCIBIR",
     "DETERMINACION", "DETERMINACIÓN", "DEVENGOS", "DEDUCCIONES",
-    "BASES DE COTIZACION", "BASES DE COTIZACIÓN", "FIRMA", "RECIBI", "RECIBÍ",
-    "ALCOBENDAS", "MADRID", "BOADILLA", "MAJADAHONDA", "VALDEMORILLO",
-    "COLMENAR", "SAN SEBASTIAN", "SAN SEBASTIÁN",
+    "BASES DE COTIZACION", "BASES DE COTIZACIÓN", "FIRMA", "SELLO",
     "CATEGORIA", "CATEGORÍA", "MATRIC", "ANTIGUEDAD", "ANTIGÜEDAD",
     "TOT. DIAS", "TOT. DÍAS", "VALPORTILLO", "CALLE",
     "CUANTIA", "CUANTÍA", "CONCEPTO",
-    "REM. TOTAL", "P.P.EXTRAS", "BASE S", "BASE A", "BASE I",
+    "REM. TOTAL", "P.P.EXTRAS", "BASE S.S", "BASE A.T", "BASE I.R.P.F",
     "T. DEVENGADO", "T. A DEDUCIR", "FECHA SELLO",
     "PERCEPCIONES", "CONTINGENCIAS", "MECANISMO", "DESEMPLEO",
     "FORMACION", "FORMACIÓN", "FONDO GARANTIA", "FONDO GARANTÍA",
@@ -309,9 +317,15 @@
     "APORTACION", "APORTACIÓN", "RECAUDACION", "RECAUDACIÓN",
     "SALARIO BASE", "PAGAS EXTRAS", "COMPLEMENTO", "COMPLEM",
     "PLUS PRODUCTIVIDAD", "PLUS TRANSPORTE", "HORAS EXTRAS",
-    "ENFERMEDAD", "AT Y EP", "MEI", "TARIFA", "SECCION", "SECCIÓN",
-    "OFICIAL", "AUXILIAR", "DIRECTOR", "PROFESOR", "TITULADO",
-    "INSTRUCTOR", "EMPLEADO", "AGENTE COM"
+    "AT Y EP", "TARIFA", "SECCION", "SECCIÓN",
+    "AGENTE COM"
+  ];
+
+  // Localidades comunes en domicilios - se filtran solo si la línea TIENE solo esto
+  const LOCALIDADES = [
+    "MADRID", "ALCOBENDAS", "BOADILLA DEL MONTE", "MAJADAHONDA",
+    "VALDEMORILLO", "COLMENAR VIEJO", "SAN SEBASTIAN DE LOS",
+    "SAN SEBASTIÁN DE LOS"
   ];
 
   const drop = document.getElementById("drop");
@@ -326,6 +340,7 @@
   const progressText = document.getElementById("progress-text");
   const results = document.getElementById("results");
   const errorBox = document.getElementById("error");
+  const diagBox = document.getElementById("diagnostic");
 
   let currentFile = null;
 
@@ -358,6 +373,7 @@
     results.classList.add("hidden");
     progress.classList.add("hidden");
     errorBox.classList.add("hidden");
+    diagBox.classList.add("hidden");
   }
 
   function formatSize(bytes) {
@@ -378,57 +394,98 @@
     return nombre || "sin_nombre";
   }
 
+  // Detector de nombre más permisivo
   function esCandidatoNombre(linea) {
-    linea = linea.trim();
-    if (linea.length < 5 || linea.length > 60) return false;
+    linea = linea.trim().replace(/\s+/g, " ");
+    if (linea.length < 5 || linea.length > 70) return false;
+    // Solo letras mayúsculas con tildes/Ñ, guiones, apóstrofes, puntos, espacios
     if (!/^[A-ZÑÁÉÍÓÚÜ\-'\.\s]+$/.test(linea)) return false;
-    if (linea.split(/\s+/).length < 2) return false;
+    // Al menos 2 palabras
+    const palabras = linea.split(/\s+/);
+    if (palabras.length < 2) return false;
+    // Cada palabra debe tener al menos 2 caracteres (evita iniciales sueltas en cabeceras)
+    if (palabras.some(p => p.length < 2)) return false;
+    
     const upper = linea.toUpperCase();
+    
+    // Blacklist
     for (const bl of BLACKLIST) {
       if (upper.includes(bl)) return false;
     }
+    
+    // Solo localidad (ej. "28000 MADRID")
+    for (const loc of LOCALIDADES) {
+      if (upper === loc || upper.endsWith(" " + loc) && palabras.length <= 4) {
+        // Si la línea contiene un código postal o solo es localidad, descartar
+        if (/\d/.test(linea)) return false;
+      }
+    }
+    
     return true;
   }
 
-  // Extraer texto de una página agrupando items por línea (mismo y)
-  async function extraerTextoPagina(pdfDoc, pageNum) {
+  // Extraer texto de una página, devolviendo tanto líneas agrupadas como items raw
+  async function extraerContenidoPagina(pdfDoc, pageNum) {
     const page = await pdfDoc.getPage(pageNum);
     const content = await page.getTextContent();
-    
-    // Agrupar items por coordenada Y (con tolerancia de 2 unidades)
-    const lines = {};
-    for (const item of content.items) {
-      if (!item.str || !item.str.trim()) continue;
-      const y = Math.round(item.transform[5] / 2) * 2;
-      if (!lines[y]) lines[y] = [];
-      lines[y].push({ x: item.transform[4], text: item.str });
+
+    const items = content.items
+      .filter(item => item.str && item.str.trim())
+      .map(item => ({
+        text: item.str,
+        x: item.transform ? item.transform[4] : 0,
+        y: item.transform ? item.transform[5] : 0
+      }));
+
+    // Agrupar por Y con tolerancia adaptativa
+    const groups = [];
+    for (const item of items) {
+      let found = false;
+      for (const g of groups) {
+        if (Math.abs(g.y - item.y) < 3) {
+          g.items.push(item);
+          found = true;
+          break;
+        }
+      }
+      if (!found) groups.push({ y: item.y, items: [item] });
     }
-    
-    // Ordenar por y descendente (arriba a abajo en PDF)
-    const sortedY = Object.keys(lines).map(Number).sort((a, b) => b - a);
-    return sortedY.map(y =>
-      lines[y].sort((a, b) => a.x - b.x).map(i => i.text).join(" ").trim()
+    // Ordenar grupos top→bottom (Y descendente en PDF)
+    groups.sort((a, b) => b.y - a.y);
+
+    const lineas = groups.map(g =>
+      g.items.sort((a, b) => a.x - b.x).map(i => i.text).join(" ").trim().replace(/\s+/g, " ")
     ).filter(l => l);
+
+    return { lineas, items };
   }
 
-  function extraerNombre(lineas, pageNum) {
-    // Las primeras líneas (parte superior del PDF) suelen contener el nombre
-    for (const linea of lineas.slice(0, 15)) {
+  function extraerNombre(lineas, items, pageNum) {
+    // Estrategia 1: líneas agrupadas (las primeras 20)
+    for (const linea of lineas.slice(0, 20)) {
       if (esCandidatoNombre(linea)) return { nombre: linea, ok: true };
     }
-    // Buscar también en el resto por si acaso
-    for (const linea of lineas) {
-      if (esCandidatoNombre(linea)) return { nombre: linea, ok: true };
+    // Estrategia 2: cada item individual (por si vienen con texto completo)
+    for (const item of items.slice(0, 50)) {
+      const text = item.text.trim();
+      if (esCandidatoNombre(text)) return { nombre: text, ok: true };
+    }
+    // Estrategia 3: probar líneas con varios items unidos sin espacio
+    // (a veces pdf.js inserta espacios fantasma entre caracteres)
+    for (const linea of lineas.slice(0, 20)) {
+      const sinEspacios = linea.replace(/\s+/g, "");
+      // Probar reinsertando un espacio entre palabras detectadas heurísticamente
+      const reagrupado = sinEspacios.replace(/([A-Z]{2,})(?=[A-Z][a-záéíóúñ])/g, "$1 ");
+      if (esCandidatoNombre(reagrupado)) return { nombre: reagrupado, ok: true };
     }
     return { nombre: `pagina_${pageNum}`, ok: false };
   }
 
-  // Promise con timeout
   function withTimeout(promise, ms, label) {
     return Promise.race([
       promise,
       new Promise((_, reject) =>
-        setTimeout(() => reject(new Error(`Timeout en ${label} (${ms/1000}s)`)), ms)
+        setTimeout(() => reject(new Error(`Timeout en ${label} (${ms / 1000}s)`)), ms)
       )
     ]);
   }
@@ -437,38 +494,36 @@
 
   async function procesar() {
     if (!currentFile) return;
-    if (!libsReady) {
-      showError("Las librerías aún no han cargado. Espera un momento o recarga la página.");
-      return;
-    }
-    
+    if (!libsReady) { showError("Las librerías aún no han cargado."); return; }
+
     processBtn.disabled = true;
     progress.classList.remove("hidden");
     results.innerHTML = "";
     results.classList.add("hidden");
     errorBox.classList.add("hidden");
+    diagBox.classList.add("hidden");
+
+    let primeraPaginaDebug = null;
 
     try {
       progressText.textContent = "Leyendo archivo...";
       progressFill.style.width = "3%";
-      
+
       const buffer = await currentFile.arrayBuffer();
-      // Crear dos copias independientes: pdf.js consume su buffer
       const bufferForPdfJs = buffer.slice(0);
       const bufferForPdfLib = buffer.slice(0);
-      
+
       progressText.textContent = "Cargando PDF...";
       progressFill.style.width = "8%";
-      
+
       const pdfDoc = await withTimeout(
         pdfjsLib.getDocument({ data: new Uint8Array(bufferForPdfJs) }).promise,
-        30000,
-        "carga de PDF"
+        60000, "carga de PDF"
       );
-      
+
       const sourcePdf = await PDFLib.PDFDocument.load(bufferForPdfLib, { ignoreEncryption: true });
       const numPages = pdfDoc.numPages;
-      
+
       const zip = new JSZip();
       const usados = {};
       const filas = [];
@@ -476,23 +531,32 @@
       for (let i = 1; i <= numPages; i++) {
         progressText.textContent = `Procesando página ${i} de ${numPages}...`;
         progressFill.style.width = ((i - 1) / numPages * 85 + 10) + "%";
-        
+
         let nombre = `pagina_${i}`;
         let ok = false;
-        
+
         try {
-          const lineas = await withTimeout(
-            extraerTextoPagina(pdfDoc, i),
-            10000,
-            `extracción página ${i}`
+          const { lineas, items } = await withTimeout(
+            extraerContenidoPagina(pdfDoc, i), 15000, `página ${i}`
           );
-          const result = extraerNombre(lineas, i);
+          // Guardar diagnóstico de la primera página
+          if (i === 1) {
+            primeraPaginaDebug = {
+              numItems: items.length,
+              numLineas: lineas.length,
+              primerasLineas: lineas.slice(0, 15),
+              primerosItems: items.slice(0, 15).map(it => ({
+                x: Math.round(it.x), y: Math.round(it.y), text: it.text
+              }))
+            };
+          }
+          const result = extraerNombre(lineas, items, i);
           nombre = result.nombre;
           ok = result.ok;
         } catch (e) {
           console.warn(`Página ${i}:`, e);
         }
-        
+
         const limpio = limpiarNombre(nombre);
         let nombreFinal = limpio;
         if (usados[limpio]) {
@@ -501,21 +565,21 @@
         } else {
           usados[limpio] = 1;
         }
-        
+
         const newPdf = await PDFLib.PDFDocument.create();
         const [copiedPage] = await newPdf.copyPages(sourcePdf, [i - 1]);
         newPdf.addPage(copiedPage);
         const bytes = await newPdf.save();
-        
+
         zip.file(`${nombreFinal}.pdf`, bytes);
         filas.push({ pagina: i, nombre: nombreFinal, ok });
-        
+
         await new Promise(r => setTimeout(r, 0));
       }
 
       progressText.textContent = "Generando ZIP...";
       progressFill.style.width = "97%";
-      
+
       const blob = await zip.generateAsync({ type: "blob" });
       const baseName = currentFile.name.replace(/\.pdf$/i, "");
       const url = URL.createObjectURL(blob);
@@ -530,24 +594,49 @@
       fileBadge.textContent = `${okCount} con nombre · ${warnCount} sin detectar`;
       fileBadge.className = warnCount > 0 ? "badge danger" : "badge success";
 
+      // Si NINGÚN nombre fue detectado, mostrar diagnóstico
+      if (okCount === 0 && primeraPaginaDebug) {
+        const d = primeraPaginaDebug;
+        const lineasTexto = d.primerasLineas.map((l, i) => `[línea ${i+1}] "${l}"`).join("\n");
+        const itemsTexto = d.primerosItems.map((it, i) =>
+          `[item ${i+1}] x=${it.x} y=${it.y}: "${it.text}"`
+        ).join("\n");
+        diagBox.innerHTML = `
+          <strong>⚠️ No se detectó ningún nombre. Diagnóstico de la página 1:</strong><br><br>
+          <strong>Items extraídos:</strong> ${d.numItems} · <strong>Líneas agrupadas:</strong> ${d.numLineas}<br><br>
+          <strong>Primeras 15 líneas agrupadas (top→bottom):</strong>
+          <pre>${escapeHtml(lineasTexto)}</pre>
+          <strong>Primeros 15 items individuales con coordenadas:</strong>
+          <pre>${escapeHtml(itemsTexto)}</pre>
+          <em>Copia este diagnóstico y pásaselo a Aylin para afinar el detector.</em>
+        `;
+        diagBox.classList.remove("hidden");
+      }
+
       results.innerHTML = filas.map(f => `
         <div class="result-row">
           <span class="num">${f.pagina}</span>
-          <span class="filename">${f.nombre}.pdf</span>
+          <span class="filename">${escapeHtml(f.nombre)}.pdf</span>
           <span class="status ${f.ok ? 'ok' : 'warn'}">${f.ok ? 'OK' : 'Sin nombre'}</span>
         </div>
       `).join("");
       results.classList.remove("hidden");
-      
+
       progressFill.style.width = "100%";
       progressText.textContent = `Listo: ${numPages} páginas procesadas`;
     } catch (err) {
       console.error(err);
-      showError("Error: " + err.message + ". Abre la consola del navegador (F12) para más detalles.");
+      showError("Error: " + err.message);
       progress.classList.add("hidden");
     } finally {
       processBtn.disabled = false;
     }
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
   }
 </script>
 </body>
