@@ -1,0 +1,643 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Divisor de nóminas</title>
+<style>
+  :root {
+    --bg: #f7f7f5;
+    --surface: #ffffff;
+    --border: #e5e5e0;
+    --border-strong: #d0d0c8;
+    --text: #1a1a17;
+    --text-muted: #6b6b66;
+    --accent: #185fa5;
+    --accent-bg: #e6f1fb;
+    --success: #0f6e56;
+    --success-bg: #e1f5ee;
+    --danger: #a32d2d;
+    --danger-bg: #fcebeb;
+    --warn-bg: #faeeda;
+    --warn-text: #854f0b;
+    --radius: 10px;
+    --radius-sm: 6px;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    padding: 2rem 1rem;
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.5;
+  }
+  .container { max-width: 680px; margin: 0 auto; }
+  header { text-align: center; margin-bottom: 2rem; }
+  h1 { font-size: 22px; font-weight: 500; margin: 0 0 6px; }
+  header p { font-size: 14px; color: var(--text-muted); margin: 0; }
+
+  .privacy {
+    font-size: 12px;
+    color: var(--warn-text);
+    background: var(--warn-bg);
+    padding: 8px 12px;
+    border-radius: var(--radius-sm);
+    margin-bottom: 1.25rem;
+    text-align: center;
+  }
+
+  .lib-status {
+    font-size: 11px;
+    text-align: center;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+  }
+  .lib-status.ok { color: var(--success); }
+  .lib-status.error { color: var(--danger); }
+
+  .drop {
+    display: block;
+    width: 100%;
+    border: 2px dashed var(--border-strong);
+    border-radius: var(--radius);
+    padding: 2.5rem 1rem;
+    text-align: center;
+    background: var(--surface);
+    cursor: pointer;
+    box-sizing: border-box;
+  }
+  .drop:hover, .drop.dragover {
+    border-color: var(--accent);
+    background: var(--accent-bg);
+  }
+  .drop p { margin: 0; }
+  .drop .main { font-size: 14px; font-weight: 500; margin-bottom: 4px; }
+  .drop .sub { font-size: 12px; color: var(--text-muted); }
+  .drop input {
+    position: absolute;
+    width: 1px; height: 1px;
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .file-info {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-top: 1rem;
+    padding: 12px 14px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+  }
+  .file-info .meta { display: flex; align-items: center; gap: 10px; }
+  .file-info .icon {
+    width: 32px; height: 32px;
+    border-radius: var(--radius-sm);
+    background: var(--bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 11px; font-weight: 500; color: var(--text-muted);
+  }
+  .file-info .name { font-size: 13px; font-weight: 500; margin: 0; }
+  .file-info .size { font-size: 12px; color: var(--text-muted); margin: 0; }
+  .badge { font-size: 12px; padding: 4px 10px; border-radius: var(--radius-sm); }
+  .badge.success { color: var(--success); background: var(--success-bg); }
+  .badge.danger { color: var(--danger); background: var(--danger-bg); }
+
+  button {
+    width: 100%;
+    margin-top: 12px;
+    padding: 11px;
+    font-size: 14px;
+    font-weight: 500;
+    border: 1px solid var(--border-strong);
+    background: var(--surface);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-family: inherit;
+  }
+  button:hover:not(:disabled) { background: var(--bg); }
+  button:disabled { opacity: 0.5; cursor: not-allowed; }
+  button.primary {
+    background: var(--text);
+    color: var(--surface);
+    border-color: var(--text);
+  }
+  button.primary:hover:not(:disabled) { background: #000; }
+
+  .progress {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+  }
+  .progress-bar {
+    height: 6px;
+    background: var(--bg);
+    border-radius: 3px;
+    overflow: hidden;
+    margin-bottom: 8px;
+  }
+  .progress-fill {
+    height: 100%;
+    background: var(--accent);
+    width: 0%;
+    transition: width 0.2s;
+  }
+  .progress-text { font-size: 12px; color: var(--text-muted); }
+
+  .results {
+    margin-top: 1rem;
+    max-height: 320px;
+    overflow-y: auto;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    background: var(--surface);
+  }
+  .result-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    font-size: 13px;
+    border-bottom: 1px solid var(--border);
+  }
+  .result-row:last-child { border-bottom: none; }
+  .result-row .num {
+    font-size: 11px;
+    color: var(--text-muted);
+    min-width: 28px;
+    font-variant-numeric: tabular-nums;
+  }
+  .result-row .filename {
+    flex: 1;
+    margin: 0 10px;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    font-size: 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .result-row .status {
+    font-size: 11px;
+    padding: 2px 8px;
+    border-radius: var(--radius-sm);
+  }
+  .status.ok { color: var(--success); background: var(--success-bg); }
+  .status.warn { color: var(--warn-text); background: var(--warn-bg); }
+
+  .error, .diagnostic {
+    margin-top: 1rem;
+    padding: 12px;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+  }
+  .error { background: var(--danger-bg); color: var(--danger); }
+  .diagnostic {
+    background: var(--warn-bg);
+    color: var(--warn-text);
+  }
+  .diagnostic pre {
+    margin: 8px 0 0 0;
+    padding: 8px;
+    background: rgba(255,255,255,0.5);
+    border-radius: 4px;
+    font-size: 11px;
+    overflow-x: auto;
+    font-family: ui-monospace, "SF Mono", Menlo, monospace;
+    white-space: pre-wrap;
+    word-break: break-all;
+    max-height: 240px;
+    overflow-y: auto;
+  }
+
+  footer {
+    text-align: center;
+    margin-top: 2rem;
+    font-size: 11px;
+    color: var(--text-muted);
+  }
+  .hidden { display: none !important; }
+</style>
+</head>
+<body>
+<div class="container">
+  <header>
+    <h1>Divisor de nóminas</h1>
+    <p>Sube un PDF con varias nóminas y descarga un ZIP con cada hoja renombrada</p>
+  </header>
+
+  <div class="privacy">
+    Tu archivo no se sube a ningún servidor. Todo el procesamiento ocurre en tu navegador.
+  </div>
+
+  <div id="lib-status" class="lib-status">Cargando librerías...</div>
+
+  <label class="drop" id="drop">
+    <input type="file" id="file" accept="application/pdf" />
+    <p class="main">Arrastra el PDF aquí o haz clic para seleccionar</p>
+    <p class="sub">Solo archivos PDF</p>
+  </label>
+
+  <div id="file-info" class="file-info hidden">
+    <div class="meta">
+      <div class="icon">PDF</div>
+      <div>
+        <p class="name" id="file-name"></p>
+        <p class="size" id="file-size"></p>
+      </div>
+    </div>
+    <span id="file-badge" class="badge success">Listo</span>
+  </div>
+
+  <button id="process" class="primary hidden">Procesar y descargar ZIP</button>
+
+  <div id="progress" class="progress hidden">
+    <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+    <div class="progress-text" id="progress-text">Procesando...</div>
+  </div>
+
+  <div id="error" class="error hidden"></div>
+  <div id="diagnostic" class="diagnostic hidden"></div>
+  <div id="results" class="results hidden"></div>
+
+  <footer>Procesamiento 100% local · sin servidores · sin tracking</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script>
+  const libStatus = document.getElementById("lib-status");
+
+  function checkLibs() {
+    const missing = [];
+    if (typeof pdfjsLib === "undefined") missing.push("pdf.js");
+    if (typeof PDFLib === "undefined") missing.push("pdf-lib");
+    if (typeof JSZip === "undefined") missing.push("JSZip");
+
+    if (missing.length > 0) {
+      libStatus.textContent = "Error: faltan " + missing.join(", ") + ". Recarga la página.";
+      libStatus.className = "lib-status error";
+      return false;
+    }
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+    libStatus.textContent = "Librerías cargadas ✓";
+    libStatus.className = "lib-status ok";
+    setTimeout(() => libStatus.classList.add("hidden"), 1500);
+    return true;
+  }
+
+  let libsReady = false;
+  function tryLoad(retries = 10) {
+    if (checkLibs()) { libsReady = true; return; }
+    if (retries > 0) setTimeout(() => tryLoad(retries - 1), 200);
+  }
+  tryLoad();
+
+  // Blacklist más ligera: solo lo imprescindible para no confundir
+  const BLACKLIST = [
+    "NOMINA", "NÓMINA", "RECIBO", "EMPRESA", "TRABAJADOR/A",
+    "DOMICILIO", "PERIODO", "PERÍODO",
+    "THINK AHEAD", "THINKAHEAD", "ACADEMY", "VIRTUS",
+    "TOTAL DEVENGADO", "LIQUIDO A PERCIBIR", "LÍQUIDO A PERCIBIR",
+    "DETERMINACION", "DETERMINACIÓN", "DEVENGOS", "DEDUCCIONES",
+    "BASES DE COTIZACION", "BASES DE COTIZACIÓN", "FIRMA", "SELLO",
+    "CATEGORIA", "CATEGORÍA", "MATRIC", "ANTIGUEDAD", "ANTIGÜEDAD",
+    "TOT. DIAS", "TOT. DÍAS", "VALPORTILLO", "CALLE",
+    "CUANTIA", "CUANTÍA", "CONCEPTO",
+    "REM. TOTAL", "P.P.EXTRAS", "BASE S.S", "BASE A.T", "BASE I.R.P.F",
+    "T. DEVENGADO", "T. A DEDUCIR", "FECHA SELLO",
+    "PERCEPCIONES", "CONTINGENCIAS", "MECANISMO", "DESEMPLEO",
+    "FORMACION", "FORMACIÓN", "FONDO GARANTIA", "FONDO GARANTÍA",
+    "COTIZACION", "COTIZACIÓN", "TRIBUTACION", "TRIBUTACIÓN",
+    "APORTACION", "APORTACIÓN", "RECAUDACION", "RECAUDACIÓN",
+    "SALARIO BASE", "PAGAS EXTRAS", "COMPLEMENTO", "COMPLEM",
+    "PLUS PRODUCTIVIDAD", "PLUS TRANSPORTE", "HORAS EXTRAS",
+    "AT Y EP", "TARIFA", "SECCION", "SECCIÓN",
+    "AGENTE COM"
+  ];
+
+  // Localidades comunes en domicilios - se filtran solo si la línea TIENE solo esto
+  const LOCALIDADES = [
+    "MADRID", "ALCOBENDAS", "BOADILLA DEL MONTE", "MAJADAHONDA",
+    "VALDEMORILLO", "COLMENAR VIEJO", "SAN SEBASTIAN DE LOS",
+    "SAN SEBASTIÁN DE LOS"
+  ];
+
+  const drop = document.getElementById("drop");
+  const fileInput = document.getElementById("file");
+  const fileInfo = document.getElementById("file-info");
+  const fileName = document.getElementById("file-name");
+  const fileSize = document.getElementById("file-size");
+  const fileBadge = document.getElementById("file-badge");
+  const processBtn = document.getElementById("process");
+  const progress = document.getElementById("progress");
+  const progressFill = document.getElementById("progress-fill");
+  const progressText = document.getElementById("progress-text");
+  const results = document.getElementById("results");
+  const errorBox = document.getElementById("error");
+  const diagBox = document.getElementById("diagnostic");
+
+  let currentFile = null;
+
+  drop.addEventListener("dragover", (e) => {
+    e.preventDefault();
+    drop.classList.add("dragover");
+  });
+  drop.addEventListener("dragleave", () => drop.classList.remove("dragover"));
+  drop.addEventListener("drop", (e) => {
+    e.preventDefault();
+    drop.classList.remove("dragover");
+    if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+  });
+  fileInput.addEventListener("change", (e) => {
+    if (e.target.files.length) handleFile(e.target.files[0]);
+  });
+
+  function handleFile(file) {
+    if (file.type !== "application/pdf" && !file.name.toLowerCase().endsWith(".pdf")) {
+      showError("Por favor, sube un archivo PDF.");
+      return;
+    }
+    currentFile = file;
+    fileName.textContent = file.name;
+    fileSize.textContent = formatSize(file.size);
+    fileBadge.textContent = "Listo";
+    fileBadge.className = "badge success";
+    fileInfo.classList.remove("hidden");
+    processBtn.classList.remove("hidden");
+    results.classList.add("hidden");
+    progress.classList.add("hidden");
+    errorBox.classList.add("hidden");
+    diagBox.classList.add("hidden");
+  }
+
+  function formatSize(bytes) {
+    if (bytes < 1024) return bytes + " B";
+    if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + " KB";
+    return (bytes / (1024 * 1024)).toFixed(1) + " MB";
+  }
+
+  function showError(msg) {
+    errorBox.textContent = msg;
+    errorBox.classList.remove("hidden");
+  }
+
+  function limpiarNombre(nombre) {
+    nombre = nombre.normalize("NFKD").replace(/[\u0300-\u036f]/g, "");
+    nombre = nombre.trim().replace(/\s+/g, "_");
+    nombre = nombre.replace(/[^A-Za-z0-9_-]/g, "");
+    return nombre || "sin_nombre";
+  }
+
+  // Detector de nombre más permisivo
+  function esCandidatoNombre(linea) {
+    linea = linea.trim().replace(/\s+/g, " ");
+    if (linea.length < 5 || linea.length > 70) return false;
+    // Solo letras mayúsculas con tildes/Ñ, guiones, apóstrofes, puntos, espacios
+    if (!/^[A-ZÑÁÉÍÓÚÜ\-'\.\s]+$/.test(linea)) return false;
+    // Al menos 2 palabras
+    const palabras = linea.split(/\s+/);
+    if (palabras.length < 2) return false;
+    // Cada palabra debe tener al menos 2 caracteres (evita iniciales sueltas en cabeceras)
+    if (palabras.some(p => p.length < 2)) return false;
+    
+    const upper = linea.toUpperCase();
+    
+    // Blacklist
+    for (const bl of BLACKLIST) {
+      if (upper.includes(bl)) return false;
+    }
+    
+    // Solo localidad (ej. "28000 MADRID")
+    for (const loc of LOCALIDADES) {
+      if (upper === loc || upper.endsWith(" " + loc) && palabras.length <= 4) {
+        // Si la línea contiene un código postal o solo es localidad, descartar
+        if (/\d/.test(linea)) return false;
+      }
+    }
+    
+    return true;
+  }
+
+  // Extraer texto de una página, devolviendo tanto líneas agrupadas como items raw
+  async function extraerContenidoPagina(pdfDoc, pageNum) {
+    const page = await pdfDoc.getPage(pageNum);
+    const content = await page.getTextContent();
+
+    const items = content.items
+      .filter(item => item.str && item.str.trim())
+      .map(item => ({
+        text: item.str,
+        x: item.transform ? item.transform[4] : 0,
+        y: item.transform ? item.transform[5] : 0
+      }));
+
+    // Agrupar por Y con tolerancia adaptativa
+    const groups = [];
+    for (const item of items) {
+      let found = false;
+      for (const g of groups) {
+        if (Math.abs(g.y - item.y) < 3) {
+          g.items.push(item);
+          found = true;
+          break;
+        }
+      }
+      if (!found) groups.push({ y: item.y, items: [item] });
+    }
+    // Ordenar grupos top→bottom (Y descendente en PDF)
+    groups.sort((a, b) => b.y - a.y);
+
+    const lineas = groups.map(g =>
+      g.items.sort((a, b) => a.x - b.x).map(i => i.text).join(" ").trim().replace(/\s+/g, " ")
+    ).filter(l => l);
+
+    return { lineas, items };
+  }
+
+  function extraerNombre(lineas, items, pageNum) {
+    // Estrategia 1: líneas agrupadas (las primeras 20)
+    for (const linea of lineas.slice(0, 20)) {
+      if (esCandidatoNombre(linea)) return { nombre: linea, ok: true };
+    }
+    // Estrategia 2: cada item individual (por si vienen con texto completo)
+    for (const item of items.slice(0, 50)) {
+      const text = item.text.trim();
+      if (esCandidatoNombre(text)) return { nombre: text, ok: true };
+    }
+    // Estrategia 3: probar líneas con varios items unidos sin espacio
+    // (a veces pdf.js inserta espacios fantasma entre caracteres)
+    for (const linea of lineas.slice(0, 20)) {
+      const sinEspacios = linea.replace(/\s+/g, "");
+      // Probar reinsertando un espacio entre palabras detectadas heurísticamente
+      const reagrupado = sinEspacios.replace(/([A-Z]{2,})(?=[A-Z][a-záéíóúñ])/g, "$1 ");
+      if (esCandidatoNombre(reagrupado)) return { nombre: reagrupado, ok: true };
+    }
+    return { nombre: `pagina_${pageNum}`, ok: false };
+  }
+
+  function withTimeout(promise, ms, label) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error(`Timeout en ${label} (${ms / 1000}s)`)), ms)
+      )
+    ]);
+  }
+
+  processBtn.addEventListener("click", procesar);
+
+  async function procesar() {
+    if (!currentFile) return;
+    if (!libsReady) { showError("Las librerías aún no han cargado."); return; }
+
+    processBtn.disabled = true;
+    progress.classList.remove("hidden");
+    results.innerHTML = "";
+    results.classList.add("hidden");
+    errorBox.classList.add("hidden");
+    diagBox.classList.add("hidden");
+
+    let primeraPaginaDebug = null;
+
+    try {
+      progressText.textContent = "Leyendo archivo...";
+      progressFill.style.width = "3%";
+
+      const buffer = await currentFile.arrayBuffer();
+      const bufferForPdfJs = buffer.slice(0);
+      const bufferForPdfLib = buffer.slice(0);
+
+      progressText.textContent = "Cargando PDF...";
+      progressFill.style.width = "8%";
+
+      const pdfDoc = await withTimeout(
+        pdfjsLib.getDocument({ data: new Uint8Array(bufferForPdfJs) }).promise,
+        60000, "carga de PDF"
+      );
+
+      const sourcePdf = await PDFLib.PDFDocument.load(bufferForPdfLib, { ignoreEncryption: true });
+      const numPages = pdfDoc.numPages;
+
+      const zip = new JSZip();
+      const usados = {};
+      const filas = [];
+
+      for (let i = 1; i <= numPages; i++) {
+        progressText.textContent = `Procesando página ${i} de ${numPages}...`;
+        progressFill.style.width = ((i - 1) / numPages * 85 + 10) + "%";
+
+        let nombre = `pagina_${i}`;
+        let ok = false;
+
+        try {
+          const { lineas, items } = await withTimeout(
+            extraerContenidoPagina(pdfDoc, i), 15000, `página ${i}`
+          );
+          // Guardar diagnóstico de la primera página
+          if (i === 1) {
+            primeraPaginaDebug = {
+              numItems: items.length,
+              numLineas: lineas.length,
+              primerasLineas: lineas.slice(0, 15),
+              primerosItems: items.slice(0, 15).map(it => ({
+                x: Math.round(it.x), y: Math.round(it.y), text: it.text
+              }))
+            };
+          }
+          const result = extraerNombre(lineas, items, i);
+          nombre = result.nombre;
+          ok = result.ok;
+        } catch (e) {
+          console.warn(`Página ${i}:`, e);
+        }
+
+        const limpio = limpiarNombre(nombre);
+        let nombreFinal = limpio;
+        if (usados[limpio]) {
+          usados[limpio]++;
+          nombreFinal = `${limpio}_${usados[limpio]}`;
+        } else {
+          usados[limpio] = 1;
+        }
+
+        const newPdf = await PDFLib.PDFDocument.create();
+        const [copiedPage] = await newPdf.copyPages(sourcePdf, [i - 1]);
+        newPdf.addPage(copiedPage);
+        const bytes = await newPdf.save();
+
+        zip.file(`${nombreFinal}.pdf`, bytes);
+        filas.push({ pagina: i, nombre: nombreFinal, ok });
+
+        await new Promise(r => setTimeout(r, 0));
+      }
+
+      progressText.textContent = "Generando ZIP...";
+      progressFill.style.width = "97%";
+
+      const blob = await zip.generateAsync({ type: "blob" });
+      const baseName = currentFile.name.replace(/\.pdf$/i, "");
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `${baseName}_dividido.zip`;
+      a.click();
+      URL.revokeObjectURL(url);
+
+      const okCount = filas.filter(f => f.ok).length;
+      const warnCount = filas.length - okCount;
+      fileBadge.textContent = `${okCount} con nombre · ${warnCount} sin detectar`;
+      fileBadge.className = warnCount > 0 ? "badge danger" : "badge success";
+
+      // Si NINGÚN nombre fue detectado, mostrar diagnóstico
+      if (okCount === 0 && primeraPaginaDebug) {
+        const d = primeraPaginaDebug;
+        const lineasTexto = d.primerasLineas.map((l, i) => `[línea ${i+1}] "${l}"`).join("\n");
+        const itemsTexto = d.primerosItems.map((it, i) =>
+          `[item ${i+1}] x=${it.x} y=${it.y}: "${it.text}"`
+        ).join("\n");
+        diagBox.innerHTML = `
+          <strong>⚠️ No se detectó ningún nombre. Diagnóstico de la página 1:</strong><br><br>
+          <strong>Items extraídos:</strong> ${d.numItems} · <strong>Líneas agrupadas:</strong> ${d.numLineas}<br><br>
+          <strong>Primeras 15 líneas agrupadas (top→bottom):</strong>
+          <pre>${escapeHtml(lineasTexto)}</pre>
+          <strong>Primeros 15 items individuales con coordenadas:</strong>
+          <pre>${escapeHtml(itemsTexto)}</pre>
+          <em>Copia este diagnóstico y pásaselo a Aylin para afinar el detector.</em>
+        `;
+        diagBox.classList.remove("hidden");
+      }
+
+      results.innerHTML = filas.map(f => `
+        <div class="result-row">
+          <span class="num">${f.pagina}</span>
+          <span class="filename">${escapeHtml(f.nombre)}.pdf</span>
+          <span class="status ${f.ok ? 'ok' : 'warn'}">${f.ok ? 'OK' : 'Sin nombre'}</span>
+        </div>
+      `).join("");
+      results.classList.remove("hidden");
+
+      progressFill.style.width = "100%";
+      progressText.textContent = `Listo: ${numPages} páginas procesadas`;
+    } catch (err) {
+      console.error(err);
+      showError("Error: " + err.message);
+      progress.classList.add("hidden");
+    } finally {
+      processBtn.disabled = false;
+    }
+  }
+
+  function escapeHtml(s) {
+    return String(s).replace(/[&<>"']/g, c => ({
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
+    }[c]));
+  }
+</script>
+</body>
+</html>
